@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    name: Tests (${{ matrix.backend }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [redis, fakeredis]
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: ruff check .
+      - name: pytest
+        run: |
+          if [ "${{ matrix.backend }}" = "redis" ]; then export REDIS_URL=redis://localhost:6379/15; fi
+          pytest -v
+      - name: Latency benchmark
+        if: matrix.backend == 'redis'
+        run: python bench/latency.py --redis-url redis://localhost:6379/14 | tee -a "$GITHUB_STEP_SUMMARY"
+
+  dashboard:
+    name: Dashboard build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - run: npm ci
+        working-directory: dashboard
+      - run: npm run build
+        working-directory: dashboard
+
+  docker:
+    name: Docker Compose smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose up -d --build
+      - name: API serves overview and jobs get processed
+        run: |
+          for i in $(seq 1 30); do curl -fsS localhost:8000/api/overview > o.json && grep -q '"completed":[1-9]' o.json && break; sleep 2; done
+          cat o.json; grep -q '"completed":[1-9]' o.json
+          curl -fsS localhost:8000/ | grep -q "Task Queue Monitor"
+      - if: failure()
+        run: docker compose logs
+      - if: always()
+        run: docker compose down -v

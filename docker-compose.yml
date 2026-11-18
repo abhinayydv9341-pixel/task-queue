@@ -1,0 +1,24 @@
+services:
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+  api:
+    build: .
+    ports: ["8000:8000"]
+    depends_on: { redis: { condition: service_healthy } }
+
+  worker:
+    build: .
+    command: python -m taskqueue worker --app examples.tasks:registry --pool emails=8 --pool media=4 --pool reports=2 --pool billing=2 --retry-base-ms 500
+    depends_on: { redis: { condition: service_healthy } }
+    deploy: { replicas: 2 }
+
+  producer:
+    build: .
+    command: python -m examples.producer
+    environment: { JOBS_PER_SECOND: "8" }
+    depends_on: { redis: { condition: service_healthy } }

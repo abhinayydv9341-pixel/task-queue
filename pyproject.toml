@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "distributed-task-queue"
+version = "1.0.0"
+description = "Redis-backed distributed task queue with priorities, delayed jobs, retries, a dead-letter queue and a React monitoring dashboard."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+dependencies = [
+  "redis>=5.0",
+  "fastapi>=0.110",
+  "uvicorn>=0.29",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "fakeredis[lua]>=2.23",
+  "httpx>=0.27",
+  "ruff>=0.5",
+]
+
+[project.scripts]
+taskqueue = "taskqueue.__main__:main"
+
+[tool.setuptools]
+packages = ["taskqueue"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 130
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
